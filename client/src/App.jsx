@@ -1,46 +1,285 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
-import { Layout, BarChart, Calendar, Users, Zap, Menu, X, ArrowRight, Globe, Search, Palette, Type, Target, Briefcase } from 'lucide-react'
+import {
+  Zap, Globe, Search, Palette, Target, Briefcase,
+  Users, MessageSquare, TrendingUp, Eye, Share2,
+  ChevronRight, Hash, BarChart2, Lightbulb, CheckCircle,
+  AlertCircle, XCircle, Star, Layers, Type, Copy, Check,
+  ArrowUpRight, Sparkles, Shield, Cpu
+} from 'lucide-react'
 
+/* ─────────────────────────────────────────────────────────────
+   SCRAPE STATUS BADGE
+───────────────────────────────────────────────────────────────*/
+// status: true = fully scraped, "partial" = partial, false = no data
+function ScrapeStatusBadge({ status }) {
+  if (status === true)
+    return <span className="badge badge--green"><CheckCircle size={10} />Scraped</span>
+  if (status === 'partial')
+    return <span className="badge badge--amber"><AlertCircle size={10} />Partial</span>
+  return <span className="badge badge--red"><XCircle size={10} />No Data</span>
+}
+
+/* ─────────────────────────────────────────────────────────────
+   COLOR SWATCH — click to copy hex value to clipboard
+───────────────────────────────────────────────────────────────*/
+function ColorSwatch({ hex, label }) {
+  const [copied, setCopied] = useState(false)
+  // validate: must be 3 or 6 char hex
+  const isValid = hex && /^#[0-9A-Fa-f]{3,6}$/.test(hex)
+
+  const handleCopy = () => {
+    if (!isValid) return
+    navigator.clipboard.writeText(hex).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
+  return (
+    <div className="swatch" onClick={handleCopy} title={isValid ? `Copy ${hex}` : 'Invalid'}>
+      <div
+        className="swatch__color"
+        style={{
+          background: isValid ? hex : 'repeating-linear-gradient(45deg,#333 0,#333 4px,#111 4px,#111 8px)',
+          boxShadow: isValid ? `0 8px 24px ${hex}55` : 'none',
+        }}
+      />
+      <span className="swatch__hex">
+        {copied ? <><Check size={10} /> Copied!</> : isValid ? hex : 'N/A'}
+      </span>
+      {label && <span className="swatch__label">{label}</span>}
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────────
+   PILL TAG — coloured text badges
+   variant: 'indigo' | 'purple' | 'teal' | 'rose' | 'amber'
+───────────────────────────────────────────────────────────────*/
+const TAG_VARS = {
+  indigo: { bg: 'rgba(99,102,241,.14)', border: 'rgba(99,102,241,.3)', color: '#a5b4fc' },
+  purple: { bg: 'rgba(168,85,247,.14)', border: 'rgba(168,85,247,.3)', color: '#d8b4fe' },
+  teal: { bg: 'rgba(20,184,166,.14)', border: 'rgba(20,184,166,.3)', color: '#5eead4' },
+  rose: { bg: 'rgba(244,63,94,.12)', border: 'rgba(244,63,94,.28)', color: '#fda4af' },
+  amber: { bg: 'rgba(245,158,11,.12)', border: 'rgba(245,158,11,.28)', color: '#fcd34d' },
+}
+
+function PillTag({ children, variant = 'indigo' }) {
+  const v = TAG_VARS[variant] || TAG_VARS.indigo
+  return (
+    <span style={{
+      background: v.bg, border: `1px solid ${v.border}`, color: v.color,
+      padding: '0.28rem 0.8rem', borderRadius: '999px',
+      fontSize: '0.78rem', fontWeight: 600,
+      display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+      letterSpacing: '0.2px',
+    }}>
+      {children}
+    </span>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────────
+   SECTION CARD — glass card with a coloured gradient top border
+───────────────────────────────────────────────────────────────*/
+function SectionCard({ icon, title, accentFrom = '#6366f1', accentTo = '#a855f7', children }) {
+  return (
+    <div className="section-card" style={{ '--af': accentFrom, '--at': accentTo }}>
+      {/* top gradient line */}
+      <div className="section-card__bar" style={{ background: `linear-gradient(90deg, ${accentFrom}, ${accentTo})` }} />
+      <div className="section-card__header">
+        <span className="section-card__icon" style={{ color: accentFrom }}>{icon}</span>
+        <span className="section-card__title" style={{ color: accentFrom }}>{title}</span>
+      </div>
+      <div className="section-card__body">{children}</div>
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────────
+   GLOWING BULLET LIST
+───────────────────────────────────────────────────────────────*/
+function BulletList({ items = [], dotColor = '#6366f1', empty = 'No data available.' }) {
+  if (!items?.length) return <p className="muted-italic">{empty}</p>
+  return (
+    <ul className="bullet-list">
+      {items.map((item, i) => (
+        <li key={i}>
+          <span className="bullet-dot" style={{ background: dotColor, boxShadow: `0 0 8px ${dotColor}99` }} />
+          {item}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────────
+   SOCIAL PLATFORM CARD
+   Platform colours: LinkedIn=#0A66C2, Instagram=gradient, Facebook=#1877F2
+───────────────────────────────────────────────────────────────*/
+const PLATFORM_META = {
+  linkedin: { label: 'LinkedIn', color: '#0A66C2', bg: 'rgba(10,102,194,.12)', abbr: 'in' },
+  instagram: { label: 'Instagram', color: '#E1306C', bg: 'rgba(225,48,108,.12)', abbr: 'ig', gradient: 'linear-gradient(135deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)' },
+  facebook: { label: 'Facebook', color: '#1877F2', bg: 'rgba(24,119,242,.12)', abbr: 'fb' },
+}
+
+function SocialCard({ platform, data, meta }) {
+  const pm = PLATFORM_META[platform] || { label: platform, color: '#6366f1', bg: 'rgba(99,102,241,.1)', abbr: '?' }
+  const status = meta?.[platform]?.status
+  const url = meta?.[platform]?.url
+
+  // Filter out 'data_source' key; turn snake_case keys into Title Case
+  const rows = Object.entries(data || {})
+    .filter(([k]) => k !== 'data_source')
+    .map(([key, val]) => ({
+      label: key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+      val,
+    }))
+
+  const hasData = status !== false && rows.length > 0
+
+  return (
+    <div className="social-card" style={{ '--pc': pm.color, '--pb': pm.bg }}>
+      {/* coloured top accent bar */}
+      <div className="social-card__bar" style={{ background: pm.gradient || pm.color }} />
+
+      <div className="social-card__head">
+        <div className="social-card__left">
+          <div
+            className="social-card__icon"
+            style={{ background: pm.gradient || pm.color }}
+            aria-label={pm.label}
+          >
+            {pm.abbr}
+          </div>
+          <div>
+            <p className="social-card__name">{pm.label}</p>
+            {url && (
+              <a href={url} target="_blank" rel="noreferrer" className="social-card__url">
+                {url.replace('https://', '')} <ArrowUpRight size={10} />
+              </a>
+            )}
+          </div>
+        </div>
+        <ScrapeStatusBadge status={status} />
+      </div>
+
+      {!hasData ? (
+        <p className="muted-italic" style={{ marginTop: '0.8rem' }}>No data was collected for this platform.</p>
+      ) : (
+        <div className="social-card__rows">
+          {rows.map(({ label, val }) => (
+            <div key={label} className="social-card__row">
+              <span className="social-card__row-label">{label}</span>
+              {Array.isArray(val) ? (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: '0.2rem' }}>
+                  {val.map((v, i) => <PillTag key={i} variant="teal"><Hash size={9} />{v}</PillTag>)}
+                </div>
+              ) : (
+                <span className="social-card__row-val">{String(val) || '—'}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────────
+   NUMBERED PILLAR ROW
+───────────────────────────────────────────────────────────────*/
+function PillarRow({ n, text }) {
+  return (
+    <div className="pillar-row">
+      <span className="pillar-row__num">{String(n).padStart(2, '0')}</span>
+      <span className="pillar-row__text">{text}</span>
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────────
+   FEATURE STEP CARD (empty state)
+───────────────────────────────────────────────────────────────*/
+function StepCard({ icon, title, description, step }) {
+  return (
+    <div className="step-card">
+      <div className="step-card__step">0{step}</div>
+      <div className="step-card__icon">{icon}</div>
+      <h3 className="step-card__title">{title}</h3>
+      <p className="step-card__desc">{description}</p>
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────────
+   STAT PILL — shown in the report hero
+───────────────────────────────────────────────────────────────*/
+function StatPill({ label, value, color = '#6366f1' }) {
+  return (
+    <div className="stat-pill" style={{ '--c': color }}>
+      <span className="stat-pill__value" style={{ color }}>{value}</span>
+      <span className="stat-pill__label">{label}</span>
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────────
+   MAIN APP
+───────────────────────────────────────────────────────────────*/
 function App() {
   const [url, setUrl] = useState('')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
+  const [activeTab, setActiveTab] = useState('overview')
 
-  // Load from LocalStorage on mount (Best Practice: Persist State)
+  // Restore last result from localStorage on mount
   useEffect(() => {
-    const savedResult = localStorage.getItem('lastAnalysis')
+    const saved = localStorage.getItem('lastAnalysis')
     const savedUrl = localStorage.getItem('lastUrl')
-    if (savedResult && savedUrl) {
-      setResult(JSON.parse(savedResult))
+    if (saved && savedUrl) {
+      setResult(JSON.parse(saved))
       setUrl(savedUrl)
     }
   }, [])
 
-  const handleAnalyze = async (e) => {
+  // Jump to overview whenever a new result arrives
+  useEffect(() => { if (result) setActiveTab('overview') }, [result])
+
+  // Analyze — uses MongoDB 24-hour cache by default
+  const handleAnalyze = async (e, force = false) => {
     e.preventDefault()
     if (!url) return
-
     setLoading(true)
     setError(null)
     setResult(null)
-
     try {
-      const response = await axios.post('http://localhost:5000/api/agents/analyze', { url })
-      if (response.data.success) {
-        setResult(response.data.data)
-        // Store in localStorage
-        localStorage.setItem('lastAnalysis', JSON.stringify(response.data.data))
+      const apiUrl = `http://localhost:5000/api/agents/analyze${force ? '?force=true' : ''}`
+      const res = await axios.post(apiUrl, { url })
+      if (res.data.success) {
+        setResult(res.data.data)
+        localStorage.setItem('lastAnalysis', JSON.stringify(res.data.data))
         localStorage.setItem('lastUrl', url)
       } else {
-        setError(response.data.error || 'Failed to analyze brand')
+        setError(res.data.error || 'Failed to analyze brand')
       }
     } catch (err) {
-      setError(err.response?.data?.error || 'Server error occurred. Make sure the backend is running and MongoDB is connected.')
+      setError(
+        err.response?.data?.error ||
+        'Server error — make sure the backend is running and MongoDB is connected.'
+      )
     } finally {
       setLoading(false)
     }
+  }
+
+  // Fresh scan — bypass cache
+  const handleForceAnalyze = (e) => {
+    localStorage.removeItem('lastAnalysis')
+    localStorage.removeItem('lastUrl')
+    handleAnalyze(e, true)
   }
 
   const handleClear = () => {
@@ -50,235 +289,381 @@ function App() {
     localStorage.removeItem('lastUrl')
   }
 
-  return (
-    <div className="app-container">
-      {/* Navbar */}
-      <nav className="glass" style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        zIndex: 1000,
-        margin: '1rem',
-        padding: '0.75rem 2rem',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Zap size={32} color="var(--primary)" fill="var(--primary)" />
-          <h2 style={{ letterSpacing: '-1px' }}>Amplifyer</h2>
-        </div>
+  // Derive quick stats from result for the report header
+  const stats = result ? [
+    { label: 'Tone Traits', value: result.brand_tone?.length || 0, color: '#6366f1' },
+    { label: 'Content Pillars', value: result.content_pillars?.length || 0, color: '#a855f7' },
+    { label: 'Pain Points', value: result.customer_pain_points?.length || 0, color: '#f43f5e' },
+    { label: 'Differentiators', value: result.unique_differentiators?.length || 0, color: '#14b8a6' },
+  ] : []
 
-        <div className="desktop-nav" style={{ display: 'flex', gap: '2rem', alignItems: 'center' }}>
-          <a href="#" style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>Solutions</a>
-          <a href="#" style={{ color: 'var(--text-muted)', textDecoration: 'none' }}>Pricing</a>
-          <button className="btn btn-primary">Dashboard</button>
+  const tabs = [
+    { id: 'overview', label: 'Overview', icon: <Eye size={14} /> },
+    { id: 'identity', label: 'Visual Identity', icon: <Palette size={14} /> },
+    { id: 'audience', label: 'Audience', icon: <Users size={14} /> },
+    { id: 'content', label: 'Content', icon: <Layers size={14} /> },
+    { id: 'social', label: 'Social Media', icon: <Share2 size={14} /> },
+  ]
+
+  return (
+    <div className="app">
+
+      {/* ── Floating orbs (pure CSS, no JS) ── */}
+      <div className="orb orb--1" />
+      <div className="orb orb--2" />
+      <div className="orb orb--3" />
+
+      {/* ════════════════════════════════════════
+          NAVBAR
+      ════════════════════════════════════════ */}
+      <nav className="navbar glass">
+        <div className="navbar__brand">
+          <Zap size={26} className="navbar__zap" />
+          <span className="navbar__wordmark">Amplifyer</span>
+        </div>
+        <div className="navbar__links">
+          <a href="#" className="navbar__link">Solutions</a>
+          <a href="#" className="navbar__link">Pricing</a>
+          <button className="btn btn--primary btn--sm">Dashboard</button>
         </div>
       </nav>
 
-      {/* Hero / Input Section */}
-      <header style={{
-        paddingTop: '160px',
-        paddingBottom: '60px',
-        textAlign: 'center',
-        background: 'radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.1) 0%, transparent 50%)'
-      }}>
-        <div className="container" style={{ maxWidth: '800px' }}>
-          <h1 style={{
-            fontSize: '3.5rem',
-            marginBottom: '1rem',
-            lineHeight: 1.1,
-            fontWeight: 800
-          }}>
-            Analyze Any Brand <br />
+      {/* ════════════════════════════════════════
+          HERO
+      ════════════════════════════════════════ */}
+      <header className="hero">
+        <div className="container" style={{ maxWidth: 820 }}>
+
+          <div className="hero__eyebrow">
+            <Sparkles size={11} />
+            Powered by Multi-Agent AI
+          </div>
+
+          <h1 className="hero__title">
+            Analyze Any Brand<br />
             <span className="gradient-text">In Seconds</span>
           </h1>
-          <p style={{
-            color: 'var(--text-muted)',
-            marginBottom: '2.5rem',
-            fontSize: '1.2rem'
-          }}>
-            Enter a website URL and let our Agent 1 (Brand Strategist) extract
-            deep brand intelligence and visual identity.
+
+          <p className="hero__sub">
+            Enter a URL — our Brand Strategist Agent extracts deep brand intelligence,
+            visual identity, and social presence in one unified report.
           </p>
 
-          <form onSubmit={handleAnalyze} style={{ position: 'relative', display: 'flex', gap: '1rem' }}>
-            <div style={{ flex: 1, position: 'relative' }}>
-              <Globe size={20} style={{ position: 'absolute', left: '1.2rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+          {/* Search bar */}
+          <form onSubmit={handleAnalyze} className="search-bar">
+            <div className="search-bar__input-wrap">
+              <Globe size={17} className="search-bar__icon" />
               <input
                 type="url"
                 placeholder="https://example.com"
-                className="glass-input"
-                style={{ paddingLeft: '3.5rem' }}
+                className="search-bar__input"
                 value={url}
-                onChange={(e) => setUrl(e.target.value)}
+                onChange={e => setUrl(e.target.value)}
                 required
               />
             </div>
-            <button className="btn btn-primary" type="submit" disabled={loading}>
-              {loading ? <div className="spinner"></div> : <><Search size={18} /> Analyze</>}
+            <button className="btn btn--primary" type="submit" disabled={loading}>
+              {loading ? <span className="spinner" /> : <><Search size={15} /> Analyze</>}
+            </button>
+            <button
+              className="btn btn--ghost"
+              type="button"
+              disabled={loading || !url}
+              onClick={handleForceAnalyze}
+              title="Bypass cache — always scrapes fresh"
+            >
+              🔄 Fresh
             </button>
           </form>
 
           {error && (
-            <div className="glass" style={{ marginTop: '2rem', padding: '1rem', borderColor: 'var(--accent)', color: '#ffb3b3', background: 'rgba(244, 63, 94, 0.1)' }}>
+            <div className="error-toast">
+              <AlertCircle size={15} style={{ flexShrink: 0 }} />
               {error}
             </div>
           )}
         </div>
       </header>
 
-      {/* Results Section */}
+      {/* ════════════════════════════════════════
+          RESULTS
+      ════════════════════════════════════════ */}
       {result && (
-        <section className="container" style={{ paddingBottom: '100px' }}>
-          <div className="glass result-card">
-            <div className="result-header">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                  {result.logo_url && (
-                    <div className="glass" style={{ width: '60px', height: '60px', borderRadius: '12px', overflow: 'hidden', padding: '0.5rem', background: 'white' }}>
-                      <img src={result.logo_url} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+        <main className="container report-wrap">
+
+          {/* ── Report header card ── */}
+          <div className="report-header glass">
+            <div className="report-header__left">
+              {result.logo_url && (
+                <div className="report-header__logo">
+                  <img src={result.logo_url} alt="brand logo" />
+                </div>
+              )}
+              <div>
+                <div className="report-header__eyebrow">
+                  <Cpu size={10} /> Agent 1 · Brand Strategist
+                </div>
+                <h2 className="report-header__title">Brand Intelligence Report</h2>
+                {result.industry && (
+                  <p className="report-header__industry">
+                    Industry — <strong>{result.industry}</strong>
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Quick stats */}
+            <div className="report-header__stats">
+              {stats.map(s => (
+                <StatPill key={s.label} label={s.label} value={s.value} color={s.color} />
+              ))}
+            </div>
+
+            <button onClick={handleClear} className="btn btn--ghost btn--sm report-header__reset">
+              ✕ Reset
+            </button>
+          </div>
+
+          {/* ── Positioning statement ── */}
+          {result.suggested_positioning_statement && (
+            <div className="positioning-card glass">
+              <div className="positioning-card__label">
+                <Star size={12} /> Market Positioning
+              </div>
+              <p className="positioning-card__text">
+                "{result.suggested_positioning_statement}"
+              </p>
+            </div>
+          )}
+
+          {/* ── Tab bar ── */}
+          <div className="tab-bar">
+            {tabs.map(t => (
+              <button
+                key={t.id}
+                onClick={() => setActiveTab(t.id)}
+                className={`tab-btn ${activeTab === t.id ? 'tab-btn--active' : ''}`}
+              >
+                {t.icon}
+                <span className="tab-btn__label">{t.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* ━━━━━━━━━━━━━━━━━━━━━━ TAB: OVERVIEW ━━━━━━━━━━━━━━━━━━━━━━ */}
+          {activeTab === 'overview' && (
+            <div className="tab-pane">
+              <div className="grid-2">
+                <SectionCard icon={<Briefcase size={14} />} title="Brand Summary"
+                  accentFrom="#6366f1" accentTo="#818cf8">
+                  <p className="body-text">{result.brand_summary || '—'}</p>
+                </SectionCard>
+                <SectionCard icon={<Target size={14} />} title="Value Proposition"
+                  accentFrom="#a855f7" accentTo="#d8b4fe">
+                  <p className="body-text">{result.value_proposition || '—'}</p>
+                </SectionCard>
+              </div>
+
+              <div className="grid-3 mt-6">
+                <SectionCard icon={<MessageSquare size={14} />} title="Brand Tone"
+                  accentFrom="#14b8a6" accentTo="#5eead4">
+                  <div className="tag-cloud">
+                    {result.brand_tone?.map((t, i) => (
+                      <PillTag key={i} variant="teal">{t}</PillTag>
+                    ))}
+                    {!result.brand_tone?.length && <p className="muted-italic">No data.</p>}
+                  </div>
+                </SectionCard>
+
+                <SectionCard icon={<Star size={14} />} title="Personality Traits"
+                  accentFrom="#a855f7" accentTo="#e879f9">
+                  <div className="tag-cloud">
+                    {result.brand_personality_traits?.map((t, i) => (
+                      <PillTag key={i} variant="purple">{t}</PillTag>
+                    ))}
+                    {!result.brand_personality_traits?.length && <p className="muted-italic">No data.</p>}
+                  </div>
+                </SectionCard>
+
+                <SectionCard icon={<BarChart2 size={14} />} title="Core Offers"
+                  accentFrom="#f59e0b" accentTo="#fcd34d">
+                  <div className="tag-cloud">
+                    {result.core_offers?.map((o, i) => (
+                      <PillTag key={i} variant="amber">{o}</PillTag>
+                    ))}
+                    {!result.core_offers?.length && <p className="muted-italic">No data.</p>}
+                  </div>
+                </SectionCard>
+              </div>
+            </div>
+          )}
+
+          {/* ━━━━━━━━━━━━━━━━━━━ TAB: VISUAL IDENTITY ━━━━━━━━━━━━━━━━━━━ */}
+          {activeTab === 'identity' && (
+            <div className="tab-pane">
+              <div className="grid-2">
+                {/* Color palette */}
+                <SectionCard icon={<Palette size={14} />} title="Color Palette"
+                  accentFrom="#6366f1" accentTo="#a855f7">
+                  <div className="palette-groups">
+                    {[
+                      { key: 'primary_colors', label: 'Primary' },
+                      { key: 'secondary_colors', label: 'Secondary' },
+                      { key: 'accent_colors', label: 'Accent / CTA' },
+                    ].map(({ key, label }) =>
+                      result.visual_identity?.[key]?.length ? (
+                        <div key={key} className="palette-group">
+                          <span className="palette-group__label">{label}</span>
+                          <div className="swatch-row">
+                            {result.visual_identity[key].map((c, i) => (
+                              <ColorSwatch key={i} hex={c.hex} label={c.usage} />
+                            ))}
+                          </div>
+                        </div>
+                      ) : null
+                    )}
+                    {!result.visual_identity?.primary_colors?.length &&
+                      !result.visual_identity?.secondary_colors?.length &&
+                      !result.visual_identity?.accent_colors?.length && (
+                        <p className="muted-italic">No colors extracted — try Fresh Scan.</p>
+                      )}
+                  </div>
+                </SectionCard>
+
+                {/* Typography */}
+                <SectionCard icon={<Type size={14} />} title="Typography & Style"
+                  accentFrom="#a855f7" accentTo="#6366f1">
+                  <div className="typo-stack">
+                    {[
+                      { key: 'primary_font', label: 'Primary Font' },
+                      { key: 'secondary_font', label: 'Secondary Font' },
+                    ].map(({ key, label }) => {
+                      const font = result.visual_identity?.typography?.[key]
+                      return font ? (
+                        <div key={key} className="font-card">
+                          <span className="font-card__label">{label}</span>
+                          <p className="font-card__name" style={{ fontFamily: font }}>{font}</p>
+                          <p className="font-card__sample" style={{ fontFamily: font }}>
+                            The quick brown fox jumps over the lazy dog.
+                          </p>
+                        </div>
+                      ) : null
+                    })}
+
+                    {result.visual_identity?.typography?.font_style_description && (
+                      <p className="muted-sm" style={{ marginTop: '0.5rem' }}>
+                        {result.visual_identity.typography.font_style_description}
+                      </p>
+                    )}
+                  </div>
+
+                  {result.visual_identity?.design_style_description && (
+                    <div className="identity-meta">
+                      <span className="identity-meta__label">Design Style</span>
+                      <p className="body-text">{result.visual_identity.design_style_description}</p>
                     </div>
                   )}
-                  <div>
-                    <h2 style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>Brand Intelligence Report</h2>
-                    <p style={{ color: 'var(--text-muted)' }}>Found in: {result.industry}</p>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: '1rem' }}>
-                  <button onClick={handleClear} className="glass btn" style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }}>Reset</button>
-                  <div className="tag">AGENT 1 ACTIVE</div>
-                </div>
+
+                  {result.visual_identity?.logo_style_description && (
+                    <div className="identity-meta">
+                      <span className="identity-meta__label">Logo</span>
+                      <p className="body-text">{result.visual_identity.logo_style_description}</p>
+                    </div>
+                  )}
+                </SectionCard>
               </div>
             </div>
+          )}
 
-            <div className="grid-2">
-              <div className="result-section">
-                <span className="section-title"><Briefcase size={14} inline /> Summary & Strategy</span>
-                <p style={{ marginBottom: '1.5rem', fontSize: '1.05rem', color: '#e2e8f0' }}>{result.brand_summary}</p>
-
-                <h4 style={{ marginBottom: '0.8rem', fontSize: '0.9rem' }}>Market Positioning</h4>
-                <p className="glass" style={{ padding: '1rem', borderStyle: 'dashed', fontStyle: 'italic', color: 'var(--text-muted)' }}>
-                  "{result.suggested_positioning_statement}"
-                </p>
-              </div>
-
-              <div className="result-section">
-                <span className="section-title"><Target size={14} inline /> Target & Value</span>
-                <div style={{ marginBottom: '1rem' }}>
-                  <small style={{ color: 'var(--text-muted)' }}>Target Audience:</small>
-                  <p>{result.target_audience}</p>
-                </div>
-                <div>
-                  <small style={{ color: 'var(--text-muted)' }}>Value Proposition:</small>
-                  <p>{result.value_proposition}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid-2" style={{ marginTop: '1rem' }}>
-              <div className="result-section">
-                <span className="section-title"><Search size={14} inline /> Personality & Tone</span>
-                <div className="tag-container">
-                  {result.brand_personality_traits.map((trait, i) => (
-                    <span key={i} className="tag">{trait}</span>
-                  ))}
-                  {result.brand_tone.map((tone, i) => (
-                    <span key={i} className="tag" style={{ background: 'rgba(168, 85, 247, 0.1)', borderColor: 'rgba(168, 85, 247, 0.2)', color: 'var(--secondary)' }}>{tone}</span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="result-section">
-                <span className="section-title"><Layout size={14} inline /> Content Pillars</span>
-                <ul style={{ paddingLeft: '1.2rem', color: 'var(--text-muted)' }}>
-                  {result.content_pillars.map((pillar, i) => (
-                    <li key={i} style={{ marginBottom: '0.3rem' }}>{pillar}</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-
-            <div style={{ borderTop: '1px solid var(--surface-border)', paddingTop: '2.5rem', marginTop: '1rem' }}>
-              <span className="section-title"><Palette size={14} inline /> Visual Identity</span>
+          {/* ━━━━━━━━━━━━━━━━━━━━━ TAB: AUDIENCE ━━━━━━━━━━━━━━━━━━━━━━━ */}
+          {activeTab === 'audience' && (
+            <div className="tab-pane">
               <div className="grid-2">
-                <div>
-                  <h4 style={{ marginBottom: '1rem', fontSize: '0.9rem' }}>Color Palette</h4>
-                  <div className="color-swatch-container">
-                    {result.visual_identity.primary_colors.map((c, i) => (
-                      <ColorSwatch key={i} hex={c.hex} label="Primary" />
-                    ))}
-                    {result.visual_identity.accent_colors.map((c, i) => (
-                      <ColorSwatch key={i} hex={c.hex} label="CTA/Accent" />
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <h4 style={{ marginBottom: '1rem', fontSize: '0.9rem' }}>Typography & Style</h4>
-                  <div style={{ display: 'flex', gap: '2rem' }}>
-                    <div>
-                      <small style={{ color: 'var(--text-muted)' }}>Primary Font:</small>
-                      <p style={{ fontFamily: result.visual_identity.typography.primary_font }}>{result.visual_identity.typography.primary_font}</p>
-                    </div>
-                    <div>
-                      <small style={{ color: 'var(--text-muted)' }}>Secondary Font:</small>
-                      <p style={{ fontFamily: result.visual_identity.typography.secondary_font }}>{result.visual_identity.typography.secondary_font}</p>
-                    </div>
-                  </div>
-                  <p style={{ marginTop: '1rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                    {result.visual_identity.design_style_description}
-                  </p>
-                </div>
+                <SectionCard icon={<Users size={14} />} title="Target Audience"
+                  accentFrom="#6366f1" accentTo="#818cf8">
+                  <p className="body-text">{result.target_audience || '—'}</p>
+                </SectionCard>
+                <SectionCard icon={<TrendingUp size={14} />} title="Unique Differentiators"
+                  accentFrom="#14b8a6" accentTo="#5eead4">
+                  <BulletList items={result.unique_differentiators} dotColor="#14b8a6" empty="No differentiators found." />
+                </SectionCard>
+              </div>
+              <div className="grid-2 mt-6">
+                <SectionCard icon={<AlertCircle size={14} />} title="Customer Pain Points"
+                  accentFrom="#f43f5e" accentTo="#fb7185">
+                  <BulletList items={result.customer_pain_points} dotColor="#f43f5e" empty="No pain points listed." />
+                </SectionCard>
+                <SectionCard icon={<Lightbulb size={14} />} title="Desired Outcomes"
+                  accentFrom="#f59e0b" accentTo="#fcd34d">
+                  <BulletList items={result.desired_customer_outcomes} dotColor="#f59e0b" empty="No outcomes listed." />
+                </SectionCard>
               </div>
             </div>
-          </div>
-        </section>
+          )}
+
+          {/* ━━━━━━━━━━━━━━━━━━━━━ TAB: CONTENT ━━━━━━━━━━━━━━━━━━━━━━━━ */}
+          {activeTab === 'content' && (
+            <div className="tab-pane">
+              <div className="grid-2">
+                <SectionCard icon={<Layers size={14} />} title="Content Pillars"
+                  accentFrom="#6366f1" accentTo="#a855f7">
+                  {result.content_pillars?.length ? (
+                    <div className="pillar-list">
+                      {result.content_pillars.map((p, i) => (
+                        <PillarRow key={i} n={i + 1} text={p} />
+                      ))}
+                    </div>
+                  ) : <p className="muted-italic">No content pillars found.</p>}
+                </SectionCard>
+                <SectionCard icon={<Globe size={14} />} title="Cross-Platform Strategy"
+                  accentFrom="#a855f7" accentTo="#6366f1">
+                  <p className="body-text">
+                    {result.cross_platform_content_strategy || 'No strategy data available.'}
+                  </p>
+                </SectionCard>
+              </div>
+            </div>
+          )}
+
+          {/* ━━━━━━━━━━━━━━━━━━━━ TAB: SOCIAL MEDIA ━━━━━━━━━━━━━━━━━━━━ */}
+          {activeTab === 'social' && (
+            <div className="tab-pane">
+              <div className="social-grid">
+                {['linkedin', 'instagram', 'facebook'].map(platform => (
+                  <SocialCard
+                    key={platform}
+                    platform={platform}
+                    data={result.social_media_presence?.[platform]}
+                    meta={result._social_scrape_meta}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+        </main>
       )}
 
+      {/* ════════════════════════════════════════
+          EMPTY STATE
+      ════════════════════════════════════════ */}
       {!result && !loading && (
-        <section className="container" style={{ padding: '40px 0', textAlign: 'center' }}>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-            gap: '2rem',
-            opacity: 0.5
-          }}>
-            <FeatureCard title="Step 1: Scrape" icon={<Globe />} description="Agent 1 crawls the website HTML and styles." />
-            <FeatureCard title="Step 2: Process" icon={<Zap />} description="Llama-3.3-70b analyzes the strategic positioning." />
-            <FeatureCard title="Step 3: Extract" icon={<Target />} description="Structured Brand Intelligence is returned." />
-          </div>
+        <section className="container empty-state">
+          <StepCard step={1} icon={<Globe size={28} />} title="Scrape"
+            description="Agent 1 crawls the website HTML, CSS variables, and meta tags." />
+          <StepCard step={2} icon={<Cpu size={28} />} title="Process"
+            description="Llama-3.3-70b analyses strategic positioning and brand voice." />
+          <StepCard step={3} icon={<Target size={28} />} title="Extract"
+            description="Structured Brand Intelligence returned as a rich JSON report." />
         </section>
       )}
 
-      <footer style={{
-        padding: '60px 0',
-        borderTop: '1px solid var(--surface-border)',
-        textAlign: 'center',
-        color: 'var(--text-muted)'
-      }}>
-        <p>&copy; 2026 Amplifyer SaaS. Built with Multi-Agent AI.</p>
+      {/* ════════════════════════════════════════
+          FOOTER
+      ════════════════════════════════════════ */}
+      <footer className="footer">
+        <p>© 2026 <strong>Amplifyer</strong> · Built with Multi-Agent AI</p>
       </footer>
-    </div>
-  )
-}
-
-function ColorSwatch({ hex, label }) {
-  return (
-    <div className="color-swatch">
-      <div className="swatch-circle" style={{ backgroundColor: hex || '#333' }}></div>
-      <span className="swatch-hex">{hex || 'N/A'}</span>
-      <small style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{label}</small>
-    </div>
-  )
-}
-
-function FeatureCard({ icon, title, description }) {
-  return (
-    <div className="glass" style={{ padding: '2rem' }}>
-      <div style={{ color: 'var(--primary)', marginBottom: '1rem' }}>{icon}</div>
-      <h3 style={{ marginBottom: '0.5rem', fontSize: '1.1rem' }}>{title}</h3>
-      <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{description}</p>
     </div>
   )
 }
